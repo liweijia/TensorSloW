@@ -137,3 +137,47 @@ void __convForward2(Tensor* const input, Tensor* const Weight, Tensor* const b, 
 	free(convolvedImage);
 }
 
+void __convBackward2(Tensor* const prevError, Tensor* const W, Tensor* currError){
+	int pR = prevError->R;
+	int pC = prevError->C;
+	int pN = prevError->N;
+	int pB = prevError->B;
+
+	int cR = currError->R; int cC = currError->C; int cN = currError->N; int cB = currError->B;
+
+	int wK1 = W->K1;
+	int wK2 = W->K2;
+	int wNi = W->Ni;
+	int wNo = W->No;
+
+	int padR = wK2 - 1;
+	int padC = wK1 - 1;
+
+	#define prevErrorData(c,r,n,b) *(prevError->data + c + r*pC + n*pR*pC + b*pR*pC*pB)
+	#define WData(c,r,ni,no) *(W->data + c + r*wK1 + ni*wK1*wK2 + no*wK1*wK2*wNi)
+	#define currErrorData(ic, ir, cha, img) *(currError->data + ic + ir*cC + cha*cC*cR + img*cC*cR*cN)
+
+	for(int img = 0; img < pB; ++img)
+		for(int no = 0; no < wNo; ++no)
+			for(int ni = 0; ni < wNi; ++ni)
+				for(int ir=0; ir<padR+pR; ++ir)
+					for(int ic=0; ic<padC+pC; ++ic){
+						real sum = 0.0;
+						for(int iir=0; iir<wK2; ++iir)
+							for(int iic=0; iic<wK1; ++iic){
+								int gr = ir+iir-1;
+								int gc = ic+iic-1;
+								int lr = gr - padR;
+								int lc = gc - padC;
+								if(lr >=0 && lr < pR && lc >=0 && lc<pC){
+									sum += prevErrorData(lc,lr,ni,img) * WData(iic,iir,ni,no);
+								}
+							}
+						currErrorData(ic, ir, ni, img) += sum;
+					}
+	
+	#undef prevErrorData
+	#undef WData
+	#undef currErrorData
+}
+
